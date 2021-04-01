@@ -8,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder
 from data import TaggerDataModule
 from data import ConlluData
 from model import TaggerModel
+from callbacks import FinetuneFreezer
 import os
 import pickle
 import logging
@@ -87,12 +88,13 @@ def main(args):
     steps_train = steps_per_epoch*args.epochs
     #num_classes = len(dataset.label_encoder.classes_)
     
-    # save callback
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor='val_loss', dirpath=args.checkpoint_dir, filename='best', save_top_k=1, mode='max')
+    # callbacks
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor='val_loss', dirpath=args.checkpoint_dir, filename='best', save_top_k=1, mode='min', save_last=True, verbose=True)
+    freezer_callback = FinetuneFreezer(unfreeze_epoch=args.freeze_encoder)
     
     # train
     model.cuda()
-    trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback], max_epochs=args.epochs)
+    trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback, freezer_callback], max_epochs=args.epochs)
     trainer.fit(model, dataset.train_dataloader(), dataset.val_dataloader())
     logging.info("Training done!")
     
@@ -108,8 +110,9 @@ if __name__=="__main__":
     parser.add_argument('--train_data', type=str, default='data/train.conllu')
     parser.add_argument('--eval_data', type=str, default='data/dev.conllu')
     parser.add_argument('--bert_pretrained', type=str, default='TurkuNLP/bert-base-finnish-cased-v1')
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=14)
     parser.add_argument('--epochs', type=int, default=8)
+    parser.add_argument('--freeze_encoder', type=int, default=0, help="Freeze bert encoder weights for x epochs. (Default is 0, no freezing)")
     parser.add_argument('--checkpoint_dir', default="checkpoints", type=str)
     parser.add_argument('--datareader', default="conllu", type=str) # TODO options
     

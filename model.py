@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import transformers
 import numpy
 import logging
+import torchmetrics
 
 import torch
 from torch.nn.parameter import Parameter
@@ -15,10 +16,9 @@ from pytorch_lightning.core.decorators import auto_move_data
 
 
 
-
 class TaggerOutput(pl.LightningModule):
 
-    def __init__(self, encoder_hidden_size, num_classes, dropout=0.0):
+    def __init__(self, encoder_hidden_size, num_classes, dropout=0.3):
         super().__init__()
         self.dropout = torch.nn.Dropout(dropout)
         self.classifier = torch.nn.Linear(encoder_hidden_size, num_classes) # torch.nn.AdaptiveLogSoftmaxWithLoss 
@@ -53,8 +53,8 @@ class TaggerModel(pl.LightningModule):
             logging.info(f"Creating prediction layer for '{target_name}' with {num_classes} classes")
             self.prediction_layers[target_name] = TaggerOutput(self.bert.config.hidden_size, num_classes)
 
-            self.accuracies[target_name] = pl.metrics.Accuracy()
-            self.val_accuracies[target_name] = pl.metrics.Accuracy()
+            self.accuracies[target_name] = torchmetrics.Accuracy()
+            self.val_accuracies[target_name] = torchmetrics.Accuracy()
 
     def forward(self, batch):
         outputs = self.bert(input_ids=batch['input_ids'],
@@ -72,12 +72,24 @@ class TaggerModel(pl.LightningModule):
 
         return logits
         
+        
+        
+    def freeze_encoder(self):
+        for p in self.bert.embeddings.parameters():
+            p.requires_grad = False
+            
+    def unfreeze_encoder(self):
+        for p in self.bert.embeddings.parameters():
+            p.requires_grad = True
+        
+        
     def training_step(self, batch, batch_idx):
         all_logits = self(batch)
         combined_loss = 0
         for key, logits in all_logits.items():
             loss = F.cross_entropy(logits.view(-1, self.target_classes[key]), batch["labels"][key].view(-1))
             combined_loss += loss
+            logits = torch.nn.Softmax(dim=2)(logits)
             self.accuracies[key](logits.view(-1, self.target_classes[key]), batch["labels"][key].view(-1))
             self.log(f"train_acc_{key}", self.accuracies[key], prog_bar=False, on_step=True, on_epoch=True)
         self.log(f"combined_train_loss", combined_loss, prog_bar=False)
@@ -89,6 +101,7 @@ class TaggerModel(pl.LightningModule):
         for key, logits in all_logits.items():
             loss = F.cross_entropy(logits.view(-1, self.target_classes[key]), batch["labels"][key].view(-1))
             combined_loss += loss
+            logits = torch.nn.Softmax(dim=2)(logits)
             self.log(f"val_loss_{key}", loss, prog_bar=False)
             self.val_accuracies[key](logits.view(-1, self.target_classes[key]), batch["labels"][key].view(-1))
             self.log(f"val_acc_{key}", self.val_accuracies[key], prog_bar=True, on_epoch=True)
@@ -97,6 +110,7 @@ class TaggerModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         all_logits = self(batch)
         for key, logits in all_logits.items():
+            logits = torch.nn.Softmax(dim=2)(logits)
             self.val_accuracies[key](logits.view(-1, self.target_classes[key]), batch["labels"][key].view(-1))
             self.log(f"test_acc_{key}", self.val_accuracies[key], prog_bar=True, on_epoch=True)
         
