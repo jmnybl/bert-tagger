@@ -40,7 +40,8 @@ def main(args):
     # create dataset
     logging.info("Creating a dataset")
     dataset = TaggerDataModule(args.bert_pretrained, label_encoders, args.batch_size)
-    dataset.setup(data, stage="predict")
+    dataset.prepare_data(data, stage="predict")
+    dataset.setup("predict")
     
     size_data = len(dataset.predict_data)
 

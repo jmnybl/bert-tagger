@@ -8,7 +8,7 @@ from sklearn.preprocessing import LabelEncoder
 from data import TaggerDataModule
 from data import ConlluData
 from model import TaggerModel
-from callbacks import FinetuneFreezer
+#from callbacks import FinetuneFreezer
 import os
 import pickle
 import logging
@@ -81,7 +81,8 @@ def main(args):
     # create dataset
     logging.info("Creating a dataset")
     dataset = TaggerDataModule(args.bert_pretrained, label_encoders, args.batch_size)
-    dataset.setup((train_data, eval_data), stage="train")
+    dataset.prepare_data((train_data, eval_data), stage="fit")
+    dataset.setup("fit")
     
     size_train = len(dataset.train_data)
     steps_per_epoch = int(size_train/args.batch_size)
@@ -90,11 +91,12 @@ def main(args):
     
     # callbacks
     checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor='val_loss', dirpath=args.checkpoint_dir, filename='best', save_top_k=1, mode='min', save_last=True, verbose=True)
-    freezer_callback = FinetuneFreezer(unfreeze_epoch=args.freeze_encoder)
+    #freezer_callback = FinetuneFreezer(unfreeze_epoch=args.freeze_encoder)
     
     # train
     model.cuda()
-    trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback, freezer_callback], max_epochs=args.epochs)
+    #trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback, freezer_callback], max_epochs=args.epochs)
+    trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback], max_epochs=args.epochs)
     trainer.fit(model, dataset.train_dataloader(), dataset.val_dataloader())
     logging.info("Training done!")
     

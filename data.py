@@ -144,9 +144,13 @@ class TaggerDataModule(pl.LightningDataModule):
         return d
 
 
-    def setup(self, data, stage="train"): # stage: train or predict
+#    def setup(self, stage): # stage: fit or predict
         
-        if stage=="train":
+#        pass
+
+    def prepare_data(self, data, stage="fit"): # stage: train or predict
+        
+        if stage=="fit":
             train_data, eval_data = data
             self.train_data = [self.transform(example) for example in train_data]
             self.eval_data = [self.transform(example) for example in eval_data]
