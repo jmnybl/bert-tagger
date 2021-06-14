@@ -5,8 +5,7 @@ import torch.nn.functional as F
 import transformers
 import numpy
 from sklearn.preprocessing import LabelEncoder
-from data import TaggerDataModule
-from data import ConlluData
+from data import ConlluData, TaggerDataModule, read_conllu
 from model import TaggerModel
 #from callbacks import FinetuneFreezer
 import os
@@ -26,8 +25,6 @@ def all_labels(data):
     return all_labels
 
 
-
-
 def fit_label_encoders(data, label_sets):
     
     label_encoders = {}
@@ -42,13 +39,17 @@ def fit_label_encoders(data, label_sets):
 
 def main(args):
 
-    
-
     # read data
+    logging.info("Reading data")
+    with open(args.train_data, "rt", encoding="utf-8") as f:
+        train_data = [s for s in read_conllu(f)]
+    with open(args.eval_data, "rt", encoding="utf-8") as f:
+        eval_data = [s for s in read_conllu(f)]
+
     datareader = ConlluData()
-    train_data = datareader.data2dict(args.train_data)
-    eval_data = datareader.data2dict(args.eval_data)
-    
+    train_data = datareader.data2dict(train_data)
+    eval_data = datareader.data2dict(eval_data)
+
     label_sets = all_labels(train_data+eval_data)
 
     # model checkpoint not available
@@ -74,29 +75,29 @@ def main(args):
         logging.info(f"Loading model from {os.path.join(args.checkpoint_dir, 'best.ckpt')}")
         with open(os.path.join(args.checkpoint_dir, "label_encoders.pickle"), "rb") as f:
            label_encoders = pickle.load(f)
-        #num_classes = len(label_encoder.classes_)
         model = TaggerModel.load_from_checkpoint(os.path.join(args.checkpoint_dir, "best.ckpt"))
         
 
     # create dataset
+    
     logging.info("Creating a dataset")
-    dataset = TaggerDataModule(args.bert_pretrained, label_encoders, args.batch_size)
+    dataset = TaggerDataModule(model.tokenizer, label_encoders, args.batch_size)
     dataset.prepare_data((train_data, eval_data), stage="fit")
     dataset.setup("fit")
     
     size_train = len(dataset.train_data)
     steps_per_epoch = int(size_train/args.batch_size)
     steps_train = steps_per_epoch*args.epochs
-    #num_classes = len(dataset.label_encoder.classes_)
     
     # callbacks
     checkpoint_callback = pl.callbacks.ModelCheckpoint(monitor='val_loss', dirpath=args.checkpoint_dir, filename='best', save_top_k=1, mode='min', save_last=True, verbose=True)
     #freezer_callback = FinetuneFreezer(unfreeze_epoch=args.freeze_encoder)
     
     # train
-    model.cuda()
+    if torch.cuda.is_available():
+        model.cuda()
     #trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback, freezer_callback], max_epochs=args.epochs)
-    trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback], max_epochs=args.epochs)
+    trainer = pl.Trainer(gpus=0, callbacks=[checkpoint_callback], max_epochs=args.epochs)
     trainer.fit(model, dataset.train_dataloader(), dataset.val_dataloader())
     logging.info("Training done!")
     

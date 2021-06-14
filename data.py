@@ -6,48 +6,50 @@ import pytorch_lightning as pl
 import os.path
 import sys
 import logging
+import time
 
 
 ID, FORM, LEMMA, UPOS, XPOS, FEAT, HEAD, DEPREL, DEPS, MISC = range(10)
+
+def read_conllu(data):
+    """data: open file object or text (str)"""
+    if isinstance(data, str):
+        file = data.split("\n")
+    else:
+        file = data
+    comm = []
+    sent = []
+    for line in file:
+        line = line.strip()
+        if not line:
+            if sent:
+                yield comm, sent
+            comm = []
+            sent = []
+            continue
+        if line.startswith("#"):
+            comm.append(line)
+            continue
+        cols = line.split("\t")
+        sent.append(cols)
+    else:
+        if sent:
+            yield comm, sent
+
 
 class ConlluData(object):
 
     def __init__(self):
         self.column_to_label_map = {UPOS: "labels_upos", FEAT: "labels_feat"}
         self.column_to_label_map_inv = {v: k for k,v in self.column_to_label_map.items()}
-
-    def read_conllu(self, f):
-        if isinstance(f, str):
-            file = open(f, "rt", encoding="utf-8")
-        else:
-            file = f
-        comm = []
-        sent = []
-        for line in file:
-            line = line.strip()
-            if not line:
-                if sent:
-                    yield comm, sent
-                comm = []
-                sent = []
-                continue
-            if line.startswith("#"):
-                comm.append(line)
-                continue
-            cols = line.split("\t")
-            sent.append(cols)
-        else:
-            if isinstance(f, str):
-                file.close()
-            if sent:
-                yield comm, sent
                     
 
 
-    def data2dict(self, f):
+    def data2dict(self, sentences):
+        "data: list of conllu (comments, sentences) -tuples"
 
         data = []
-        for comm, sent in self.read_conllu(f):
+        for comm, sent in sentences:
             tokens = []
             upos = [] # TODO: add here all you need
             feat = []
@@ -63,8 +65,6 @@ class ConlluData(object):
         
         
     def write_predictions(self, data, predictions, sent_id, output_file):
-        
-        
 
         comm, conllu_sent = data[sent_id]["original_data"]
         
@@ -98,12 +98,12 @@ def pad_with_zero(vals):
 
 class TaggerDataModule(pl.LightningDataModule):
 
-    def __init__(self, pretrained_bert, label_encoders, batch_size):
+    def __init__(self, tokenizer, label_encoders, batch_size):
         super().__init__()
 
         self.batch_size = batch_size
-        self.tokenizer = transformers.BertTokenizerFast.from_pretrained(pretrained_bert)
-        self.label_encoders = label_encoders
+        self.tokenizer = tokenizer
+        self.label_encoders = label_encoders # TODO: should this be inside model as well?
         
         
     def transform(self, item, inference=False):
@@ -145,7 +145,6 @@ class TaggerDataModule(pl.LightningDataModule):
 
 
 #    def setup(self, stage): # stage: fit or predict
-        
 #        pass
 
     def prepare_data(self, data, stage="fit"): # stage: train or predict

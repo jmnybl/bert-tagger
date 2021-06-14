@@ -44,6 +44,7 @@ class TaggerModel(pl.LightningModule):
         self.target_classes = target_classes # key: name of the target layer, value: number of classes for the target
         self.weights = weights
         self.bert = transformers.BertModel.from_pretrained(pretrained_bert, output_hidden_states=True, return_dict=True)
+        self.tokenizer = transformers.BertTokenizerFast.from_pretrained(pretrained_bert)
                                                            
         # layers for different label_sets (upos, feats ...)
         self.prediction_layers = torch.nn.ModuleDict()
