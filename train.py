@@ -97,7 +97,7 @@ def main(args):
     if torch.cuda.is_available():
         model.cuda()
     #trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback, freezer_callback], max_epochs=args.epochs)
-    trainer = pl.Trainer(gpus=0, callbacks=[checkpoint_callback], max_epochs=args.epochs)
+    trainer = pl.Trainer(gpus=1, callbacks=[checkpoint_callback], max_epochs=args.epochs)
     trainer.fit(model, dataset.train_dataloader(), dataset.val_dataloader())
     logging.info("Training done!")
     
