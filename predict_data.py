@@ -2,9 +2,7 @@ import torch
 import argparse
 import pytorch_lightning as pl
 import torch.nn.functional as F
-import transformers
 import numpy
-from sklearn.preprocessing import LabelEncoder
 from data import ConlluData, TaggerDataModule, read_conllu
 from model import TaggerModel
 import os
@@ -13,7 +11,6 @@ import logging
 from tqdm import tqdm
 import time
 import sys
-import transformers
 
 logging.basicConfig(level=logging.INFO)
 
